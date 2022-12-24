@@ -134,10 +134,11 @@ def follow_index(request):
 def profile_follow(request, username):
     user = request.user
     author = get_object_or_404(User, username=username)
-    Follow.objects.get_or_create(
-        author=author,
-        user=user,
-    )
+    if user != author:
+        Follow.objects.get_or_create(
+            author=author,
+            user=user,
+        )
     return redirect('posts:follow_index')
 
 

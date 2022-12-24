@@ -147,6 +147,15 @@ class PostsTests(TestCase):
             with self.subTest(post=post):
                 response = self.assertIn(post, all_page_objects)
 
+    def test_cant_follow_yourself(self):
+        """Пользватель не может подписываться на себя."""
+        before_follow = self.author.follower.count()
+        self.authorized_author.get(reverse(
+            'posts:profile_follow', kwargs={'username': self.author}
+        ))
+        after_follow = self.author.follower.count()
+        self.assertEqual(before_follow, after_follow)
+
     def test_follow_index_before_follow(self):
         """Шаблон follow_index сформирован с правильным контекстом.
         При отсутствии подписок не выводит посты."""
