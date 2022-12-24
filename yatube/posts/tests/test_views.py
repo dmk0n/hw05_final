@@ -9,7 +9,7 @@ from django.urls import reverse
 from django import forms
 from django.core.cache import cache
 
-from ..models import Group, Post
+from ..models import Group, Post, Comment
 
 TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 User = get_user_model()
@@ -65,6 +65,11 @@ class PostsTests(TestCase):
             group=cls.group,
             image=cls.uploaded,
         )
+        cls.comment = Comment.objects.create(
+            author=cls.author,
+            post=cls.post_with_group,
+            text='Тестовый комментарий'
+        )
         cls.authorized_author = Client()
         cls.authorized_author.force_login(cls.author)
 
@@ -93,6 +98,7 @@ class PostsTests(TestCase):
             reverse(
                 'posts:post_edit', kwargs={'post_id': self.post.id}
             ): 'posts/create_post.html',
+            reverse('posts:follow_index'): 'posts/follow.html',
         }
         for reverse_name, template in templates_pages_names.items():
             with self.subTest(template=template):
@@ -118,19 +124,6 @@ class PostsTests(TestCase):
             with self.subTest(post=post):
                 response = self.assertIn(post, all_objects)
 
-    def test_index_cache(self):
-        """Шаблон index правильно использует кэширование."""
-        response = self.authorized_author.get(reverse('posts:index'))
-        all_objects = response.content
-        Post.objects.all().delete()
-        response = self.authorized_author.get(reverse('posts:index'))
-        all_objects_after_delate = response.content
-        self.assertEqual(all_objects, all_objects_after_delate)
-        cache.clear()
-        response = self.authorized_author.get(reverse('posts:index'))
-        all_objects_after_delate = response.content
-        self.assertNotEqual(all_objects, all_objects_after_delate)
-
     def test_group_post_show_correct_context(self):
         """Шаблон group_post сформирован с правильным контекстом."""
         response = self.authorized_author.get(
@@ -154,15 +147,16 @@ class PostsTests(TestCase):
             with self.subTest(post=post):
                 response = self.assertIn(post, all_page_objects)
 
-    def test_follow_index_show_correct_context(self):
+    def test_follow_index_before_follow(self):
         """Шаблон follow_index сформирован с правильным контекстом.
-        Авторизованный пользователь может подписываться на других
-        пользователей и удалять их из подписок."""
-        # проверка до подписки
+        При отсутствии подписок не выводит посты."""
         response = self.authorized_author.get(reverse('posts:follow_index'))
         all_objects = response.context['page_obj']
         self.assertEqual(len(all_objects), 0)
-        # проверка после подписки
+
+    def test_follow_index_after_follow(self):
+        """Шаблон follow_index сформирован с правильным контекстом.
+        При наличии подписок выводят связанные посты."""
         self.authorized_author.get(reverse(
             'posts:profile_follow', kwargs={'username': self.author_2}
         ))
@@ -178,12 +172,20 @@ class PostsTests(TestCase):
         for post_value, expected_value in first_object_values.items():
             with self.subTest(expected_value=expected_value):
                 self.assertEqual(post_value, expected_value)
+
+    def test_follow_index_after_follow_new_post(self):
+        """Шаблон follow_index сформирован с правильным контекстом.
+        При добавлении поста автором, на которого подписан пользователь,
+        пост появляется в ленте подписок"""
         # проверка после создания нового поста
         post_3 = Post.objects.create(
             author=self.author_2,
             text='Тестовый пост 3',
             group=self.group,
         )
+        self.authorized_author.get(reverse(
+            'posts:profile_follow', kwargs={'username': self.author_2}
+        ))
         response = self.authorized_author.get(reverse('posts:follow_index'))
         all_objects = response.context['page_obj']
         first_object = all_objects[0]
@@ -196,23 +198,38 @@ class PostsTests(TestCase):
         for post_value, expected_value in first_object_values.items():
             with self.subTest(expected_value=expected_value):
                 self.assertEqual(post_value, expected_value)
-        # проверка после отписки
+
+    def test_follow_index_after_unfolow(self):
+        """Шаблон follow_index сформирован с правильным контекстом.
+        При отсутствии подписок не выводит посты."""
+        self.authorized_author.get(reverse(
+            'posts:profile_follow', kwargs={'username': self.author_2}
+        ))
         self.authorized_author.get(reverse(
             'posts:profile_unfollow', kwargs={'username': self.author_2}
         ))
         response = self.authorized_author.get(reverse('posts:follow_index'))
         all_objects = response.context['page_obj']
-        # проверка после cоздания поста
+        self.assertEqual(len(all_objects), 0)
+
+    def test_follow_index_after_unfolow_new_post(self):
+        """Шаблон follow_index сформирован с правильным контекстом.
+        При отсутствии подписок не выводит новые посты авторов,
+        на которых нет подписки."""
+        self.authorized_author.get(reverse(
+            'posts:profile_follow', kwargs={'username': self.author_2}
+        ))
+        self.authorized_author.get(reverse(
+            'posts:profile_unfollow', kwargs={'username': self.author_2}
+        ))
         Post.objects.create(
             author=self.author_2,
             text='Тестовый пост 4',
             group=self.group_2,
         )
-        self.authorized_author.get(reverse(
-            'posts:profile_unfollow', kwargs={'username': self.author_2}
-        ))
         response = self.authorized_author.get(reverse('posts:follow_index'))
         all_objects = response.context['page_obj']
+        self.assertEqual(len(all_objects), 0)
 
     def test_group_post_doesnt_show_extra_context(self):
         """Шаблон group_post сформирован без лишнего контекста."""
@@ -270,6 +287,19 @@ class PostsTests(TestCase):
             with self.subTest(expected_value=expected_value):
                 self.assertEqual(post_value, expected_value)
 
+    def test_post_detail_show_correct_comments(self):
+        """Шаблон post_detail сформирован с правильной секцией комментариев."""
+        response = self.authorized_author.get(
+            reverse('posts:post_detail',
+                    kwargs={'post_id': self.post_with_group.id})
+        )
+        object_form = response.context['form']
+        object_comments = response.context['comments']
+        self.assertIsInstance(
+            object_form.fields['text'], forms.fields.CharField)
+        self.assertEqual(
+            len(object_comments), self.post_with_group.comments.count())
+
     def test_post_detail_adds_comment(self):
         """После успешной отправки комментарий появляется на странице поста."""
         form_data = {
@@ -323,6 +353,20 @@ class PostsTests(TestCase):
         for form_value, expected_value in form_instances.items():
             with self.subTest(form_value=form_value):
                 self.assertIsInstance(form_value, expected_value)
+
+    # ТЕСТ КЭША У МЕНЯ ТУТ
+    def test_index_cache(self):
+        """Шаблон index правильно использует кэширование."""
+        response = self.authorized_author.get(reverse('posts:index'))
+        all_objects = response.content
+        Post.objects.all().delete()
+        response = self.authorized_author.get(reverse('posts:index'))
+        all_objects_after_delate = response.content
+        self.assertEqual(all_objects, all_objects_after_delate)
+        cache.clear()
+        response = self.authorized_author.get(reverse('posts:index'))
+        all_objects_after_delate = response.content
+        self.assertNotEqual(all_objects, all_objects_after_delate)
 
 
 class PaginatorViewsTest(TestCase):
@@ -388,3 +432,5 @@ class PaginatorViewsTest(TestCase):
         ) + f'?page={self.last_page_number}')
         self.assertEqual(
             len(response.context['page_obj']), self.posts_on_last_page)
+
+    # тест кэша находится в конце пролого класса

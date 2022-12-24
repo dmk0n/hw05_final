@@ -204,3 +204,10 @@ class PostFormTests(TestCase):
             follow=True
         )
         self.assertEqual(Comment.objects.count(), comments_count + 1)
+        self.assertTrue(
+            Comment.objects.filter(
+                text=form_data['text'],
+                post=self.post,
+                author=self.user
+            ).exists()
+        )

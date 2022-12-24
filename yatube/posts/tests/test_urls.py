@@ -43,6 +43,7 @@ class PostURLTests(TestCase):
             f'/posts/{self.post.id}/': HTTPStatus.OK,
             f'/posts/{self.post.id}/edit/': HTTPStatus.OK,
             '/create/': HTTPStatus.OK,
+            '/follow/': HTTPStatus.OK,
             '/unexisting_page/': HTTPStatus.NOT_FOUND,
         }
         for address, response_code in templates_url.items():
@@ -53,6 +54,7 @@ class PostURLTests(TestCase):
     def test_urls_for_guest_client(self):
         """Страницы из словаря недоступны неавторизованному пользователю."""
         templates_url = {
+            '/follow/': HTTPStatus.FOUND,
             f'/posts/{self.post.id}/edit/': HTTPStatus.FOUND,
             '/create/': HTTPStatus.FOUND,
         }
@@ -78,6 +80,7 @@ class PostURLTests(TestCase):
             f'/posts/{self.post.id}/': 'posts/post_detail.html',
             f'/posts/{self.post.id}/edit/': 'posts/create_post.html',
             '/create/': 'posts/create_post.html',
+            '/follow/': 'posts/follow.html',
         }
         for address, template in templates_url.items():
             with self.subTest(address=address):

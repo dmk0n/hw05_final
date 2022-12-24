@@ -1,5 +1,7 @@
 {% extends "base.html" %}
-{% block title %}Custom CSRF check error{% endblock %}
+{% block title %}CSRF токен недействителен или отсутствует{% endblock %}
 {% block content %}
-  <h1>Custom CSRF check error. 403</h1>
+  <h1>CSRF токен недействителен или отсутствует. Ошибка 403. Убедитесь, что ваш браузер правильно отправляет cookie. 
+    Если ваш браузер правильно отправляет cookie на нашем сайте, то стоит попробовать очистеть cookie и кэш браузера.
+  </h1>
 {% endblock %}

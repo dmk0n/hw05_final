@@ -4,11 +4,9 @@ from django.shortcuts import redirect
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.contrib.auth.models import User
-from django.views.decorators.cache import cache_page
 
 from .models import Post
 from .models import Group
-from .models import Comment
 from .models import Follow
 from .forms import PostForm, CommentForm
 
@@ -21,7 +19,6 @@ def get_page(request, post_list):
     return page_obj
 
 
-@cache_page(20)
 def index(request):
     template = 'posts/index.html'
     post_list = Post.objects.all()
@@ -50,21 +47,24 @@ def profile(request, username):
     if request.user.is_authenticated:
         current_user = request.user
     post_list = user.posts.all()
-    following = post_list.filter(
-        author__following__user=current_user).exists()
+    following = current_user and Follow.objects.filter(
+        author=user, user=current_user).exists()
+    # а нам точно нужно тут проверять, что пользователь авторизован?
+    # нельзя оставить только фильтр?
     page_obj = get_page(request, post_list)
     context = {
         'author': user,
         'page_obj': page_obj,
-        'following': following
+        'following': following,
+        'current_user': current_user
     }
     return render(request, 'posts/profile.html', context)
 
 
 def post_detail(request, post_id):
     post = get_object_or_404(Post, id=post_id)
-    form = CommentForm(request.POST or None)
-    comments = Comment.objects.filter(post=post)
+    form = CommentForm()
+    comments = post.comments.all()
     context = {
         'post': post,
         'comments': comments,
@@ -93,12 +93,8 @@ def post_edit(request, post_id):
     is_edit = True
     if post.author != request.user:
         return redirect('posts:post_detail', post_id)
-    intaial_data = {
-        'text': post.text,
-        'group': post.group,
-    }
     form = PostForm(request.POST or None, files=request.FILES or None,
-                    instance=post, initial=intaial_data)
+                    instance=post)
     if form.is_valid():
         post = form.save()
         return redirect('posts:post_detail', post_id)
@@ -138,10 +134,10 @@ def follow_index(request):
 def profile_follow(request, username):
     user = request.user
     author = get_object_or_404(User, username=username)
-    follow_exist = Follow.objects.filter(
-        author=author, user=user).exists()
-    if user != author and not follow_exist:
-        Follow.objects.create(user=user, author=author)
+    Follow.objects.get_or_create(
+        author=author,
+        user=user,
+    )
     return redirect('posts:follow_index')
 
 
@@ -149,8 +145,6 @@ def profile_follow(request, username):
 def profile_unfollow(request, username):
     user = request.user
     author = get_object_or_404(User, username=username)
-    follow_exist = Follow.objects.filter(
-        author=author, user=user).exists()
-    if user != author and follow_exist:
+    if user != author:
         Follow.objects.filter(user=user, author=author).delete()
     return redirect('posts:follow_index')
