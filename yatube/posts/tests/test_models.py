@@ -82,3 +82,10 @@ class CommentModelTest(TestCase):
         for real_verbose_name, expected_verbose_name in verbose_names.items():
             with self.subTest(real_verbose_name=real_verbose_name):
                 self.assertEqual(real_verbose_name, expected_verbose_name)
+
+    def test_Comment_have_correct_object_names(self):
+        """Проверяем, что у модели Comment корректно работает __str__."""
+        comment = self.comment
+        TEXT_LENGTH = 15
+        expected_object_name = comment.text[:TEXT_LENGTH]
+        self.assertEqual(expected_object_name, str(comment))

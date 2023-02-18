@@ -49,14 +49,11 @@ def profile(request, username):
     post_list = user.posts.all()
     following = current_user and Follow.objects.filter(
         author=user, user=current_user).exists()
-    # а нам точно нужно тут проверять, что пользователь авторизован?
-    # нельзя оставить только фильтр?
     page_obj = get_page(request, post_list)
     context = {
         'author': user,
         'page_obj': page_obj,
         'following': following,
-        'current_user': current_user
     }
     return render(request, 'posts/profile.html', context)
 

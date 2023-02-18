@@ -79,6 +79,10 @@ class Comment(models.Model):
         verbose_name = "Комментарий"
         verbose_name_plural = "Комментарии"
 
+    def __str__(self) -> str:
+        TEXT_LENGTH = 15
+        return self.text[:TEXT_LENGTH]
+
 
 class Follow(models.Model):
     user = models.ForeignKey(
